@@ -1,6 +1,6 @@
 # Pipeline de Analíticas del Club
 
-Una solución integral de analíticas construida sobre principios de stack de datos moderno, que incluye esquema estrella, transformaciones dbt, orquestación Airflow e ingesta de datos con Python. Este fue un proyecto entregado como resultado de un Trabajo Final Integrador (que eventualmente mejoré un poco) para la asignatura de Ingeniería de Datos I.
+Una solución integral de analíticas construida sobre principios de stack de datos moderno, que incluye esquema estrella, transformaciones dbt, orquestación Airflow e ingesta de datos con Python. Este fue un proyecto entregado como resultado de un Trabajo Final Integrador (que eventualmente mejoré un poco) para la asignatura de Ingeniería de Datos I, que simula los datos operativos de un club deportivo, crea un warehouse y muestra KPIs.
 
 ## 🏗️ Resumen de Arquitectura
 
