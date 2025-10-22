@@ -1,0 +1,148 @@
+name: club_analytics
+connection: postgres_local
+data_source: postgres
+
+datasource postgres_local:
+  type: postgres
+  connection:
+    host: localhost
+    port: 5432
+    username: postgres
+    password: postgres
+    database: club_analytics
+    schema: analytics
+
+tables:
+  - name: fact_ticket_sales
+    columns:
+      - name: ticket_sale_key
+        tests:
+          - row_count > 0
+          - missing_count == 0
+          - duplicate_count == 0
+      - name: ticket_price
+        tests:
+          - missing_count == 0
+          - invalid_count == 0
+          - min >= 0
+          - max <= 10000
+      - name: member_key
+        tests:
+          - missing_count == 0
+          - invalid_count == 0
+      - name: event_key
+        tests:
+          - missing_count == 0
+          - invalid_count == 0
+
+  - name: fact_dues_payments
+    columns:
+      - name: dues_payment_key
+        tests:
+          - row_count > 0
+          - missing_count == 0
+          - duplicate_count == 0
+      - name: payment_amount
+        tests:
+          - missing_count == 0
+          - invalid_count == 0
+          - min >= 0
+          - max <= 50000
+      - name: member_key
+        tests:
+          - missing_count == 0
+          - invalid_count == 0
+      - name: payment_status
+        tests:
+          - missing_count == 0
+          - invalid_count == 0
+          - valid_count == row_count
+          - invalid_values:
+              - values: ['Paid', 'Pending', 'Overdue']
+
+  - name: dim_member
+    columns:
+      - name: member_key
+        tests:
+          - row_count > 0
+          - missing_count == 0
+          - duplicate_count == 0
+      - name: status
+        tests:
+          - missing_count == 0
+          - invalid_count == 0
+          - valid_count == row_count
+          - invalid_values:
+              - values: ['Active', 'Inactive']
+      - name: registration_date
+        tests:
+          - missing_count == 0
+          - invalid_count == 0
+
+  - name: dim_event
+    columns:
+      - name: event_key
+        tests:
+          - row_count > 0
+          - missing_count == 0
+          - duplicate_count == 0
+      - name: event_type
+        tests:
+          - missing_count == 0
+          - invalid_count == 0
+          - valid_count == row_count
+          - invalid_values:
+              - values: ['EVENT', 'PARTIDO', 'ACTIVIDAD']
+      - name: event_date
+        tests:
+          - missing_count == 0
+          - invalid_count == 0
+
+# Cross-table tests
+tests:
+  - name: "Referential integrity: fact_ticket_sales.member_key -> dim_member.member_key"
+    test: |
+      SELECT COUNT(*) as invalid_members
+      FROM analytics.fact_ticket_sales fts
+      LEFT JOIN analytics.dim_member dm ON fts.member_key = dm.member_key
+      WHERE dm.member_key IS NULL
+    fail_threshold: 0
+
+  - name: "Referential integrity: fact_ticket_sales.event_key -> dim_event.event_key"
+    test: |
+      SELECT COUNT(*) as invalid_events
+      FROM analytics.fact_ticket_sales fts
+      LEFT JOIN analytics.dim_event de ON fts.event_key = de.event_key
+      WHERE de.event_key IS NULL
+    fail_threshold: 0
+
+  - name: "Referential integrity: fact_dues_payments.member_key -> dim_member.member_key"
+    test: |
+      SELECT COUNT(*) as invalid_members
+      FROM analytics.fact_dues_payments fdp
+      LEFT JOIN analytics.dim_member dm ON fdp.member_key = dm.member_key
+      WHERE dm.member_key IS NULL
+    fail_threshold: 0
+
+  - name: "Business rule: No future ticket sales"
+    test: |
+      SELECT COUNT(*) as future_sales
+      FROM analytics.fact_ticket_sales
+      WHERE sale_date > CURRENT_DATE
+    fail_threshold: 0
+
+  - name: "Business rule: No negative ticket prices"
+    test: |
+      SELECT COUNT(*) as negative_prices
+      FROM analytics.fact_ticket_sales
+      WHERE ticket_price < 0
+    fail_threshold: 0
+
+  - name: "Business rule: No negative payment amounts"
+    test: |
+      SELECT COUNT(*) as negative_amounts
+      FROM analytics.fact_dues_payments
+      WHERE payment_amount < 0
+    fail_threshold: 0
+
+

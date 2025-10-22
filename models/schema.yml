@@ -1,0 +1,170 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw OLTP data from club database"
+    tables:
+      - name: socio
+        description: "Member information"
+        columns:
+          - name: idsocio
+            description: "Primary key for member"
+            tests:
+              - unique
+              - not_null
+      - name: entrada
+        description: "Ticket sales data"
+        columns:
+          - name: identrada
+            description: "Primary key for ticket"
+            tests:
+              - unique
+              - not_null
+      - name: cuota
+        description: "Dues payment data"
+        columns:
+          - name: idcuota
+            description: "Primary key for payment"
+            tests:
+              - unique
+              - not_null
+      - name: evento
+        description: "Event information"
+        columns:
+          - name: idevento
+            description: "Primary key for event"
+            tests:
+              - unique
+              - not_null
+      - name: partido
+        description: "Sports match information"
+        columns:
+          - name: idpartido
+            description: "Primary key for match"
+            tests:
+              - unique
+              - not_null
+      - name: actividad
+        description: "Activity information"
+        columns:
+          - name: idactividad
+            description: "Primary key for activity"
+            tests:
+              - unique
+              - not_null
+
+models:
+  - name: stg_socio
+    description: "Staging model for member data"
+    columns:
+      - name: member_id
+        description: "Member identifier"
+        tests:
+          - unique
+          - not_null
+      - name: status
+        description: "Member status"
+        tests:
+          - accepted_values:
+              values: ['Active', 'Inactive']
+
+  - name: stg_entrada
+    description: "Staging model for ticket sales"
+    columns:
+      - name: ticket_id
+        description: "Ticket identifier"
+        tests:
+          - unique
+          - not_null
+      - name: ticket_price
+        description: "Ticket price"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10000
+
+  - name: stg_cuota
+    description: "Staging model for dues payments"
+    columns:
+      - name: payment_id
+        description: "Payment identifier"
+        tests:
+          - unique
+          - not_null
+      - name: payment_amount
+        description: "Payment amount"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 50000
+
+  - name: dim_member
+    description: "Member dimension table"
+    columns:
+      - name: member_key
+        description: "Surrogate key for member"
+        tests:
+          - unique
+          - not_null
+      - name: member_id
+        description: "Business key for member"
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_event
+    description: "Event dimension table"
+    columns:
+      - name: event_key
+        description: "Surrogate key for event"
+        tests:
+          - unique
+          - not_null
+      - name: event_id
+        description: "Business key for event"
+        tests:
+          - unique
+          - not_null
+
+  - name: fact_ticket_sales
+    description: "Ticket sales fact table"
+    columns:
+      - name: ticket_sale_key
+        description: "Primary key for ticket sale"
+        tests:
+          - unique
+          - not_null
+      - name: member_key
+        description: "Foreign key to member dimension"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_member')
+              field: member_key
+      - name: event_key
+        description: "Foreign key to event dimension"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_event')
+              field: event_key
+
+  - name: fact_dues_payments
+    description: "Dues payments fact table"
+    columns:
+      - name: dues_payment_key
+        description: "Primary key for dues payment"
+        tests:
+          - unique
+          - not_null
+      - name: member_key
+        description: "Foreign key to member dimension"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_member')
+              field: member_key
+
+

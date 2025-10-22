@@ -1,0 +1,164 @@
+name: Club Analytics CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: club_analytics_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pandas numpy psycopg2-binary sqlalchemy streamlit plotly
+    
+    - name: Install dbt
+      run: |
+        pip install dbt-postgres
+    
+    - name: Install Soda
+      run: |
+        pip install soda-core-postgres
+    
+    - name: Wait for PostgreSQL
+      run: |
+        while ! pg_isready -h localhost -p 5432 -U postgres; do
+          echo "Waiting for PostgreSQL..."
+          sleep 2
+        done
+    
+    - name: Initialize database
+      run: |
+        PGPASSWORD=postgres psql -h localhost -U postgres -d club_analytics_test -f sql/init/01_create_tables.sql
+        PGPASSWORD=postgres psql -h localhost -U postgres -d club_analytics_test -f sql/init/02_insert_data.sql
+        PGPASSWORD=postgres psql -h localhost -U postgres -d club_analytics_test -f sql/star_schema.sql
+        PGPASSWORD=postgres psql -h localhost -U postgres -d club_analytics_test -f sql/populate_star_schema.sql
+    
+    - name: Run Python tests
+      run: |
+        pytest tests/ -v
+    
+    - name: Run dbt tests
+      run: |
+        cd dbt
+        dbt deps
+        dbt run --profiles-dir .
+        dbt test --profiles-dir .
+    
+    - name: Run Soda data quality checks
+      run: |
+        soda scan -d postgres_test -c soda/configuration.yml tables/
+      env:
+        POSTGRES_HOST: localhost
+        POSTGRES_PORT: 5432
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DATABASE: club_analytics_test
+
+  build-and-test-docker:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build Docker Compose
+      run: |
+        docker-compose build
+    
+    - name: Start services
+      run: |
+        docker-compose up -d
+        sleep 30  # Wait for services to start
+    
+    - name: Check service health
+      run: |
+        docker-compose ps
+        docker-compose logs postgres
+        docker-compose logs airflow-webserver
+    
+    - name: Run data ingestion test
+      run: |
+        docker-compose exec airflow-webserver python /opt/airflow/scripts/data_ingestion.py
+    
+    - name: Stop services
+      run: |
+        docker-compose down -v
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install linting tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort mypy
+    
+    - name: Run Black
+      run: |
+        black --check scripts/ tests/ streamlit_app.py
+    
+    - name: Run isort
+      run: |
+        isort --check-only scripts/ tests/ streamlit_app.py
+    
+    - name: Run flake8
+      run: |
+        flake8 scripts/ tests/ streamlit_app.py
+    
+    - name: Run mypy
+      run: |
+        mypy scripts/ tests/ streamlit_app.py --ignore-missing-imports
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+
