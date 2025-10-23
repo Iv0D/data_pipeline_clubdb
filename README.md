@@ -68,6 +68,7 @@ graph TB
 - Docker & Docker Compose
 - Python 3.9+
 - PostgreSQL 15+
+- SQL Server 2019
 
 ### Configuración en 5 Comandos
 
